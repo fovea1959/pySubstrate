@@ -88,7 +88,7 @@ class Substrate(ABC):
         self.cracks = []
         self.c_grid = Array2D(width, height, 10001)
         self.off_img = Array2D(width, height, self.bg_color)
-        self.parsed_colors = []
+        self.parsed_colors = [(0, 255, 0)]
         self.max_cycles = 0
         self.cycles = 0
         self.wireframe = False
@@ -127,9 +127,9 @@ class Substrate(ABC):
             if py >= self.height:
                 py = self.height - 1
 
-            self.c_grid[px,py] = cr.t
+            self.c_grid[px, py] = cr.t
 
-        a = self.c_grid[px,py]
+        a = self.c_grid[px, py]
 
         if random.choice([True, False]):
             a = a - 90 * random.uniform(-2, 2.1) # (frand(4.1) - 2)
@@ -245,13 +245,12 @@ class Substrate(ABC):
                 self.make_crack()
             self.initialized = True
         for i in range(len(self.cracks)):
-            self.movedrawcrack(self.cracks[i])
+            self.move_draw_crack(self.cracks[i])
         self.cycles += 1
         if self.max_cycles is not None and self.max_cycles > 0 and self.cycles > self.max_cycles:
             self.done = True
 
-
-    def movedrawcrack(self, cr: Crack):
+    def move_draw_crack(self, cr: Crack):
         if not cr.curved:
             cr.x += float(STEP) * math.cos(cr.t * math.pi/180)
             cr.y += float(STEP) * math.sin(cr.t * math.pi/180)

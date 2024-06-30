@@ -16,10 +16,11 @@ class MySubstrate(Substrate):
 
     def graphics_draw_point(self, x, y, color):
         logging.info("draw_point %d,%d %s", x, y, color)
+        self.surface.set_at((x, y), color)
 
     def graphics_initialize(self):
-        self.surface = pygame.display.set_mode((self.width, self.height))
         logging.info("initialize %s %s", self.width, self.height)
+        self.surface = pygame.display.set_mode((self.width, self.height))
 
 
 def main():
@@ -28,13 +29,16 @@ def main():
     pygame.init()
 
     substrate = MySubstrate(height=400, width=400, bg_color=(255, 0, 0))
+    substrate.wireframe = True
 
     while not substrate.done:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 substrate.done = True
         substrate.update()
+        logging.debug("updating pygame")
         pygame.display.update()
+
 
 
 if __name__ == '__main__':
