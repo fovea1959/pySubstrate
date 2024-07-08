@@ -1,12 +1,14 @@
 import logging
 import math
 import random
+import textwrap
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import Optional
 
 
-STEP=0.42
+STEP = 0.42
 
 
 @dataclass
@@ -63,64 +65,121 @@ class Array2D:
             self._buf[i] = value
 
 
+def hex_to_rgb(value):
+    """
+    https://stackoverflow.com/a/42011375
+
+    Convert color`s value in hex format to RGB format.
+
+    >>> hex_to_rgb('fff')
+    (255, 255, 255)
+    >>> hex_to_rgb('ffffff')
+    (255, 255, 255)
+    >>> hex_to_rgb('#EBF442')
+    (235, 244, 66)
+    >>> hex_to_rgb('#000000')
+    (0, 0, 0)
+    >>> hex_to_rgb('#000')
+    (0, 0, 0)
+    >>> hex_to_rgb('#54433f')
+    (84, 67, 63)
+    >>> hex_to_rgb('#f7efed')
+    (247, 239, 237)
+    >>> hex_to_rgb('#191616')
+    (25, 22, 22)
+    """
+
+    if value[0] == '#':
+        value = value[1:]
+
+    len_value = len(value)
+
+    if len_value not in [3, 6]:
+        raise ValueError('Incorrect a value hex {}'.format(value))
+
+    if len_value == 3:
+        value = ''.join(i * 2 for i in value)
+    return tuple(int(i, 16) for i in textwrap.wrap(value, 2))
+
+
 @dataclass
-class Substrate(ABC):
+class SubstrateParameters:
     height: int
     width: int
     initial_cracks: int
-    next_crack_id: int
     max_num: int    # # of cracks?
-    grains: int
     circle_percent: int
     fg_color: tuple
     bg_color: tuple
-    cracks: list # of cracks
-    c_grid: Array2D # of ints
-    off_img: Array2D # of pixels (RGB)
-    parsed_colors: list # of RGBA
-    max_cycles: int
-    cycles: int
+    parsed_colors: list  # of RGBA
+    grains: int
     wireframe: bool
     seamless: bool
-    initialized: bool
-    quiesced: bool
-    logger: logging.Logger
+    seed: Optional[tuple]
 
-    def __init__(self, height=None, width=None, initial_cracks=3, max_num=100, fg_color=(0, 0, 0), bg_color=(255, 255, 255)):
+    def __init__(self, height=None, width=None, initial_cracks=3, max_num=100, fg_color=(0, 0, 0),
+                 bg_color=(255, 255, 255)):
         self.height = height
         self.width = width
         self.initial_cracks = initial_cracks
-        self.next_crack_id = 0
         self.max_num = max_num
-        self.grains = 0
         self.circle_percent = 0
         self.fg_color = fg_color
         self.bg_color = bg_color
-        self.cracks = []
-        self.c_grid = Array2D(width, height, 10001)
-        self.off_img = Array2D(width, height, self.bg_color)
         self.parsed_colors = [(0, 255, 0)]
+        self.grains = 64
         self.max_cycles = 0
-        self.cycles = 0
         self.wireframe = False
         self.seamless = False
         self.seed = None
+
+    def set_color_list(self, color_list=None):
+        parsed_color_list = []
+        if color_list is not None:
+            for c in color_list:
+                if type(c) is tuple:
+                    parsed_color_list.append(c)
+                elif type(c) is str:
+                    parsed_color_list.append(hex_to_rgb(c))
+
+        self.parsed_colors = parsed_color_list
+
+
+class Substrate(ABC):
+    next_crack_id: int
+    cracks: list  # of cracks
+    c_grid: Array2D  # of ints
+    off_img: Array2D  # of pixels (RGB)
+    max_cycles: int
+    cycles: int
+    initialized: bool
+    quiesced: bool
+    logger: logging.Logger
+    p: SubstrateParameters
+
+    def __init__(self, p=None):
+        self.p = p
+        self.next_crack_id = 0
+        self.cracks = []
+        self.c_grid = Array2D(self.p.width, self.p.height, 10001)
+        self.off_img = Array2D(self.p.width, self.p.height, self.p.bg_color)
+        self.cycles = 0
         self.initialized = False
         self.quiesced = False
         self.done = False
         self.logger = logging.getLogger('Substrate')
 
     def start_crack(self, cr: Crack):
-        self.logger.info ("Starting crack %d", cr.crack_id)
+        self.logger.info("Starting crack %d", cr.crack_id)
         found = False
         timeout = 0
-        px = py = 0 # superfluous
+        px = py = 0  # superfluous
         while not found and timeout < 10000:
             timeout = timeout + 1
-            px = random.randint(0, self.width-1)
-            py = random.randint(0, self.height-1)
+            px = random.randint(0, self.p.width-1)
+            py = random.randint(0, self.p.height-1)
 
-            if self.c_grid[px,py] < 10000:
+            if self.c_grid[px, py] < 10000:
                 found = True
 
         if not found:
@@ -130,28 +189,28 @@ class Substrate(ABC):
 
             if px < 0:
                 px = 0
-            if px >= self.width:
-                px = self.width-1
+            if px >= self.p.width:
+                px = self.p.width-1
 
             if py < 0:
                 py = 0
-            if py >= self.height:
-                py = self.height - 1
+            if py >= self.p.height:
+                py = self.p.height - 1
 
             self.c_grid[px, py] = cr.t
 
         a = self.c_grid[px, py]
 
         if random.choice([True, False]):
-            a = a - 90 * random.uniform(-2, 2.1) # (frand(4.1) - 2)
+            a = a - 90 * random.uniform(-2, 2.1)  # (frand(4.1) - 2)
         else:
-            a = a + 90 * random.uniform(-2, 2.1) # (frand(4.1) - 2)
+            a = a + 90 * random.uniform(-2, 2.1)  # (frand(4.1) - 2)
 
-        if random.randint(0, 100) < self.circle_percent:
+        if random.randint(0, 100) < self.p.circle_percent:
             cr.curved = True
             cr.degrees_drawn = 0
 
-            r = 10 + (random.uniform(0, (self.width + self.height) / 2.0))
+            r = 10 + (random.uniform(0, (self.p.width + self.p.height) / 2.0))
             if random.choice([True, False]):
                 r = -r
 
@@ -169,20 +228,20 @@ class Substrate(ABC):
         cr.t = a
 
     def make_crack(self):
-        if self.next_crack_id < self.max_num and not self.quiesced:
+        if len(self.cracks) < self.p.max_num and not self.quiesced:
             self.logger.debug("creating %d", self.next_crack_id)
             cr = Crack(self.next_crack_id)
             self.next_crack_id += 1
             self.logger.debug("made crack = %d", cr.crack_id)
             self.cracks.append(cr)
             cr.sand_p = 0
-            cr.sand_g = random.uniform(-0.01, 0.19) # (frand(0.2) - 0.01)
-            cr.sand_color = random.choice(self.parsed_colors)
+            cr.sand_g = random.uniform(-0.01, 0.19)  # (frand(0.2) - 0.01)
+            cr.sand_color = random.choice(self.p.parsed_colors)
             cr.curved = False
             cr.degrees_drawn = 0
 
-            cr.x = random.randint(0, self.width-1)
-            cr.y = random.randint(0, self.height-1)
+            cr.x = random.randint(0, self.p.width-1)
+            cr.y = random.randint(0, self.p.height-1)
             cr.t = random.uniform(0, 360)
 
             self.start_crack(cr)
@@ -190,7 +249,9 @@ class Substrate(ABC):
             self.logger.debug("make_crack: done! next_crack_id %d, quiesced %s", self.next_crack_id, str(self.quiesced))
 
     def trans_point(self, x1, y1, myc, a):
-        if 0 <= x1 < self.width and 0 <= y1 < self.height:
+        x1 = int(x1)
+        y1 = int(y1)
+        if 0 <= x1 < self.p.width and 0 <= y1 < self.p.height:
             if a >= 1.0:
                 self.off_img[x1, y1] = myc
             else:
@@ -202,7 +263,7 @@ class Substrate(ABC):
                 c = (n_r, n_g, n_b)
                 self.off_img[x1, y1] = c
                 return c
-        return self.bg_color
+        return self.p.bg_color
 
     def region_color(self, cr: Crack):
         rx = float(cr.x)
@@ -215,11 +276,11 @@ class Substrate(ABC):
 
             cx = int(rx)
             cy = int(ry)
-            if self.seamless:
-                cx %= self.width
-                cy %= self.height
+            if self.p.seamless:
+                cx %= self.p.width
+                cy %= self.p.height
 
-            if 0 <= cx < self.width and 0 <= cy < self.height:
+            if 0 <= cx < self.p.width and 0 <= cy < self.p.height:
                 if self.c_grid[cx, cy] > 10000:
                     pass
                 else:
@@ -227,7 +288,7 @@ class Substrate(ABC):
             else:
                 openspace = False
 
-        cr.sand_g += random.uniform (-0.050, 0.050) # (frand(0.1) - 0.050)
+        cr.sand_g += random.uniform(-0.050, 0.050)  # (frand(0.1) - 0.050)
         max_g = 1.0
 
         if cr.sand_g < 0:
@@ -236,39 +297,40 @@ class Substrate(ABC):
         if cr.sand_g > max_g:
             cr.sand_g = max_g
 
-        grains = self.grains
+        grains = self.p.grains
 
         w = cr.sand_g / (grains - 1)
 
         for i in range(grains):
-            draw_x = (cr.x + (rx - cr.x) * math.sin(cr.sand_p + math.sin(float (i * w))))
-            draw_y = (cr.y + (ry - cr.y) * math.sin(cr.sand_p + math.sin(float (i * w))))
+            draw_x = (cr.x + (rx - cr.x) * math.sin(cr.sand_p + math.sin(float(i * w))))
+            draw_y = (cr.y + (ry - cr.y) * math.sin(cr.sand_p + math.sin(float(i * w))))
 
-            if self.seamless:
-                draw_x = (draw_x + self.width) % self.width
-                draw_y = (draw_y + self.height) % self.height
+            if self.p.seamless:
+                draw_x = (draw_x + self.p.width) % self.p.width
+                draw_y = (draw_y + self.p.height) % self.p.height
 
             c = self.trans_point(draw_x, draw_y, cr.sand_color, (0.1 - i / (grains * 10)))
-            self.graphics_draw_point(draw_x, draw_y, c)
+            self.graphics_draw_point(int(draw_x), int(draw_y), c)
 
     def update(self):
         if not self.initialized:
-            if self.seed is None:
-                r_seed = random.getstate()
-                self.logger.info("seed is %s, %s", type(r_seed), r_seed)
+            if self.p.seed is None:
+                self.p.seed = random.getstate()
+                self.logger.info("seed is %s, %s", type(self.p.seed), self.p.seed)
             else:
-                random.setstate(self.seed)
-            self.off_img.fill(self.bg_color)
+                random.setstate(self.p.seed)
+            self.off_img.fill(self.p.bg_color)
             self.graphics_initialize()
-            self.graphics_draw_fill(self.bg_color)
-            for _ in range(self.initial_cracks):
+            self.graphics_draw_fill(self.p.bg_color)
+            for _ in range(self.p.initial_cracks):
                 self.make_crack()
             self.initialized = True
         for crack in list(self.cracks):
             self.move_draw_crack(crack)
         self.cycles += 1
-        if self.max_cycles is not None and self.max_cycles > 0 and self.cycles > self.max_cycles:
-            self.done = True
+        if self.p.max_cycles is not None and self.p.max_cycles > 0:
+            if self.cycles > self.p.max_cycles:
+                self.done = True
         if len(self.cracks) == 0:
             self.done = True
 
@@ -289,25 +351,27 @@ class Substrate(ABC):
             cr.t += cr.t_inc
             cr.degrees_drawn += abs(cr.t_inc)
 
-        cx = int(cr.x + random.uniform(0.33, 0.66)) # (frand(0.66) - 0.33))
-        cy = int(cr.y + random.uniform(0.33, 0.66)) # (frand(0.66) - 0.33))
+        cx = int(cr.x + random.uniform(0.33, 0.66))  # (frand(0.66) - 0.33))
+        cy = int(cr.y + random.uniform(0.33, 0.66))  # (frand(0.66) - 0.33))
 
-        if self.seamless:
-            cx = (cx + self.width) % self.width    # not sure if we needed to check for negative wrap?
-            cy = (cy + self.height) % self.height
+        if self.p.seamless:
+            cx = (cx + self.p.width) % self.p.width    # not sure if we needed to check for negative wrap?
+            cy = (cy + self.p.height) % self.p.height
 
-        if 0 <= cx < self.width and 0 <= cy <= self.height:
+        if 0 <= cx < self.p.width and 0 <= cy <= self.p.height:
             # draw sand painter if we are not wireframe
-            if not self.wireframe:
+            if not self.p.wireframe:
                 self.region_color(cr)
 
             # draw fg_color crack
-            ccccc = self.fg_color
+            ccccc = self.p.fg_color
+            """
             if cr.crack_id == 0:
                 ccccc = (0, 255, 0)
             if cr.crack_id == 4:
                 ccccc = (255, 0, 0)
-            self.off_img[cx,cy] = ccccc
+            """
+            self.off_img[cx, cy] = ccccc
             self.graphics_draw_point(cx, cy, ccccc)
 
             if cr.curved and cr.degrees_drawn > 360:
@@ -319,20 +383,23 @@ class Substrate(ABC):
                 self.logger.debug("Crack list %s", str(self.crack_list()))
                 # END REWORK
                 self.make_crack()
+                self.make_crack()
                 self.logger.debug("Crack list %s", str(self.crack_list()))
 
             else:
-                self.logger.debug("Crack %d (%s) was @ %s, now @ %s = %s", cr.crack_id, str(cr.t), old, (cx, cy), self.c_grid[cx,cy])
-                if self.c_grid[cx,cy] > 10000 or (abs(self.c_grid[cx,cy] - cr.t) < 5):
+                self.logger.debug("Crack %d (%s) was @ %s, now @ %s = %s",
+                                  cr.crack_id, str(cr.t), old, (cx, cy), self.c_grid[cx, cy])
+                if self.c_grid[cx, cy] > 10000 or (abs(self.c_grid[cx, cy] - cr.t) < 5):
                     # continue cracking
-                    self.c_grid[cx,cy] = int(cr.t)
-                elif abs(self.c_grid[cx,cy]) > 2:
+                    self.c_grid[cx, cy] = int(cr.t)
+                elif abs(self.c_grid[cx, cy]) > 2:
                     self.logger.debug("Crack %d ending, c_grid > 2", cr.crack_id)
                     # REWORK
                     # self.start_crack(cr)
                     self.cracks.remove(cr)
                     self.logger.debug("Crack list %s", str(self.crack_list()))
                     # end REWORK
+                    self.make_crack()
                     self.make_crack()
                     self.logger.debug("Crack list %s", str(self.crack_list()))
                 else:
@@ -350,6 +417,7 @@ class Substrate(ABC):
             self.logger.debug("Crack list %s", str(self.crack_list()))
             # end REWORK
 
+            self.make_crack()
             self.make_crack()
             self.logger.debug("Crack list %s", str(self.crack_list()))
 
