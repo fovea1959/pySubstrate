@@ -27,10 +27,19 @@ class Crack:
 
     degrees_drawn: float
 
-    crack_num: int # not sure this is needed
+    crack_id: int
+
+    dead: bool
 
     def __init__(self, number):
-        self.crack_num = number
+        self.crack_id = number
+        self.dead = False
+
+    def __eq__(self, other):
+        return self.crack_id == other.crack_id
+
+    def kill(self):
+        self.dead = True
 
 
 class Array2D:
@@ -59,6 +68,7 @@ class Substrate(ABC):
     height: int
     width: int
     initial_cracks: int
+    next_crack_id: int
     max_num: int    # # of cracks?
     grains: int
     circle_percent: int
@@ -73,13 +83,14 @@ class Substrate(ABC):
     wireframe: bool
     seamless: bool
     initialized: bool
-    quiesced : bool
+    quiesced: bool
     logger: logging.Logger
 
     def __init__(self, height=None, width=None, initial_cracks=3, max_num=100, fg_color=(0, 0, 0), bg_color=(255, 255, 255)):
         self.height = height
         self.width = width
         self.initial_cracks = initial_cracks
+        self.next_crack_id = 0
         self.max_num = max_num
         self.grains = 0
         self.circle_percent = 0
@@ -100,7 +111,7 @@ class Substrate(ABC):
         self.logger = logging.getLogger('Substrate')
 
     def start_crack(self, cr: Crack):
-        self.logger.info ("Starting crack %d", cr.crack_num)
+        self.logger.info ("Starting crack %d", cr.crack_id)
         found = False
         timeout = 0
         px = py = 0 # superfluous
@@ -158,9 +169,11 @@ class Substrate(ABC):
         cr.t = a
 
     def make_crack(self):
-        if len(self.cracks) < self.max_num and not self.quiesced:
-            cr = Crack(len(self.cracks))
-            self.logger.debug("made crack = %d", cr.crack_num)
+        if self.next_crack_id < self.max_num and not self.quiesced:
+            self.logger.debug("creating %d", self.next_crack_id)
+            cr = Crack(self.next_crack_id)
+            self.next_crack_id += 1
+            self.logger.debug("made crack = %d", cr.crack_id)
             self.cracks.append(cr)
             cr.sand_p = 0
             cr.sand_g = random.uniform(-0.01, 0.19) # (frand(0.2) - 0.01)
@@ -173,6 +186,8 @@ class Substrate(ABC):
             cr.t = random.uniform(0, 360)
 
             self.start_crack(cr)
+        else:
+            self.logger.debug("make_crack: done! next_crack_id %d, quiesced %s", self.next_crack_id, str(self.quiesced))
 
     def trans_point(self, x1, y1, myc, a):
         if 0 <= x1 < self.width and 0 <= y1 < self.height:
@@ -189,7 +204,7 @@ class Substrate(ABC):
                 return c
         return self.bg_color
 
-    def region_color (self, cr: Crack):
+    def region_color(self, cr: Crack):
         rx = float(cr.x)
         ry = float(cr.y)
         openspace = True
@@ -238,19 +253,31 @@ class Substrate(ABC):
 
     def update(self):
         if not self.initialized:
+            if self.seed is None:
+                r_seed = random.getstate()
+                self.logger.info("seed is %s, %s", type(r_seed), r_seed)
+            else:
+                random.setstate(self.seed)
             self.off_img.fill(self.bg_color)
             self.graphics_initialize()
             self.graphics_draw_fill(self.bg_color)
             for _ in range(self.initial_cracks):
                 self.make_crack()
             self.initialized = True
-        for i in range(len(self.cracks)):
-            self.move_draw_crack(self.cracks[i])
+        for crack in list(self.cracks):
+            self.move_draw_crack(crack)
         self.cycles += 1
         if self.max_cycles is not None and self.max_cycles > 0 and self.cycles > self.max_cycles:
             self.done = True
+        if len(self.cracks) == 0:
+            self.done = True
+
+    def crack_list(self):
+        return tuple(cr.crack_id for cr in self.cracks)
 
     def move_draw_crack(self, cr: Crack):
+        self.logger.debug("Crack %d start", cr.crack_id)
+        old = (cr.x, cr.y)
         if not cr.curved:
             cr.x += float(STEP) * math.cos(cr.t * math.pi/180)
             cr.y += float(STEP) * math.sin(cr.t * math.pi/180)
@@ -275,28 +302,57 @@ class Substrate(ABC):
                 self.region_color(cr)
 
             # draw fg_color crack
-            self.off_img[cx,cy] = self.fg_color
-            self.graphics_draw_point(cx, cy, self.fg_color)
+            ccccc = self.fg_color
+            if cr.crack_id == 0:
+                ccccc = (0, 255, 0)
+            if cr.crack_id == 4:
+                ccccc = (255, 0, 0)
+            self.off_img[cx,cy] = ccccc
+            self.graphics_draw_point(cx, cy, ccccc)
 
             if cr.curved and cr.degrees_drawn > 360:
+                self.logger.debug("Crack %d ending, 360 degree curve", cr.crack_id)
                 # completed the circle
-                self.start_crack(cr)
+                # REWORK
+                # self.start_crack(cr)
+                self.cracks.remove(cr)
+                self.logger.debug("Crack list %s", str(self.crack_list()))
+                # END REWORK
                 self.make_crack()
+                self.logger.debug("Crack list %s", str(self.crack_list()))
+
             else:
+                self.logger.debug("Crack %d (%s) was @ %s, now @ %s = %s", cr.crack_id, str(cr.t), old, (cx, cy), self.c_grid[cx,cy])
                 if self.c_grid[cx,cy] > 10000 or (abs(self.c_grid[cx,cy] - cr.t) < 5):
                     # continue cracking
-                    self.c_grid[cx,cy] = cr.t
-                elif abs(self.c_grid[cx,cy] > 2):
-                    self.start_crack(cr)
+                    self.c_grid[cx,cy] = int(cr.t)
+                elif abs(self.c_grid[cx,cy]) > 2:
+                    self.logger.debug("Crack %d ending, c_grid > 2", cr.crack_id)
+                    # REWORK
+                    # self.start_crack(cr)
+                    self.cracks.remove(cr)
+                    self.logger.debug("Crack list %s", str(self.crack_list()))
+                    # end REWORK
                     self.make_crack()
+                    self.logger.debug("Crack list %s", str(self.crack_list()))
+                else:
+                    self.logger.debug("Crack %d was funny", cr.crack_id)
         else:
             # out of bounds
-            cr.x = random.randint(0, self.width-1)
-            cr.y = random.randint(0, self.height-1)
-            cr.t = random.uniform(0, 360.0)
-            self.start_crack(cr)
+            self.logger.debug("Crack %d was @ %s, now @ %s, out of bounds", cr.crack_id, old, (cx, cy))
+
+            # REWORK
+            # cr.x = random.randint(0, self.width-1)
+            # cr.y = random.randint(0, self.height-1)
+            # cr.t = random.uniform(0, 360.0)
+            # self.start_crack(cr)
+            self.cracks.remove(cr)
+            self.logger.debug("Crack list %s", str(self.crack_list()))
+            # end REWORK
+
             self.make_crack()
-            
+            self.logger.debug("Crack list %s", str(self.crack_list()))
+
     @abstractmethod
     def graphics_draw_point(self, x, y, color):
         pass
