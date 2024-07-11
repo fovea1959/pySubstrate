@@ -30,6 +30,10 @@ class Crack:
 
     crack_id: int
 
+    x_start: float
+    y_start: float
+    cycle_start: int
+
     def __init__(self, crack_id=None):
         self.crack_id = crack_id
 
@@ -205,8 +209,9 @@ class Substrate(ABC):
         else:
             cr.curved = False
 
-        cr.x = px + (0.61 * math.cos(math.radians(a)))
-        cr.y = py + (0.61 * math.sin(math.radians(a)))
+        cr.x_start = cr.x = px + (0.61 * math.cos(math.radians(a)))
+        cr.y_start = cr.y = py + (0.61 * math.sin(math.radians(a)))
+        cr.cycle_start = self.cycles
         cr.t = a
 
     def make_crack(self):
@@ -310,9 +315,9 @@ class Substrate(ABC):
         if self.quiesced and not self.was_quiesced:
             self.next_crack_id_when_quiesced = self.next_crack_id
             self.was_quiesced = True
+        self.cycles += 1
         for crack in list(self.cracks):
             self.move_draw_crack(crack)
-        self.cycles += 1
         if self.parameters.max_cycles is not None and self.parameters.max_cycles > 0:
             if self.cycles > self.parameters.max_cycles:
                 self.done = True
@@ -323,7 +328,7 @@ class Substrate(ABC):
         return tuple(cr.crack_id for cr in self.cracks)
 
     def move_draw_crack(self, cr: Crack):
-        self.logger.debug("Crack %d start", cr.crack_id)
+        #  self.logger.debug("Crack %d start", cr.crack_id)
         old = (cr.x, cr.y)
         if not cr.curved:
             cr.x += float(STEP) * math.cos(cr.t * math.pi/180)
@@ -340,7 +345,8 @@ class Substrate(ABC):
         cy = int(cr.y + random.uniform(0.33, 0.66))  # (frand(0.66) - 0.33))
 
         if self.parameters.seamless:
-            cx = (cx + self.parameters.width) % self.parameters.width    # not sure if we needed to check for negative wrap?
+            # not sure if we needed to check for negative wrap?
+            cx = (cx + self.parameters.width) % self.parameters.width
             cy = (cy + self.parameters.height) % self.parameters.height
 
         if 0 <= cx < self.parameters.width and 0 <= cy <= self.parameters.height:
@@ -406,9 +412,13 @@ class Substrate(ABC):
             self.make_crack()
             self.logger.debug("Crack list %s", str(self.crack_list()))
 
-    def kill_crack(self, cr: Crack=None, reason: dict=None):
+    def kill_crack(self, cr: Crack = None, reason: dict = None):
+        self.logger.info("Crack %d dying: start=%s, end=%s, length=%f, lifetime=%d", cr.crack_id,
+                         (cr.x_start, cr.y_start), (cr.x, cr.y),
+                         math.sqrt((cr.x_start - cr.x) ** 2 + (cr.y_start - cr.y) ** 2),
+                         self.cycles - cr.cycle_start
+                         )
         self.cracks.remove(cr)
-
 
     @abstractmethod
     def graphics_draw_point(self, x, y, color):
