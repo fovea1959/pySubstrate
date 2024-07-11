@@ -4,14 +4,13 @@ import random
 import textwrap
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 
 STEP = 0.42
 
 
-@dataclass
 class Crack:
     x: float
     y: float
@@ -31,17 +30,11 @@ class Crack:
 
     crack_id: int
 
-    dead: bool
-
-    def __init__(self, number):
-        self.crack_id = number
-        self.dead = False
+    def __init__(self, crack_id=None):
+        self.crack_id = crack_id
 
     def __eq__(self, other):
         return self.crack_id == other.crack_id
-
-    def kill(self):
-        self.dead = True
 
 
 class Array2D:
@@ -104,35 +97,19 @@ def hex_to_rgb(value):
 
 @dataclass
 class SubstrateParameters:
-    height: int
-    width: int
-    initial_cracks: int
-    max_num: int    # # of cracks
-    circle_percent: int
-    fg_color: tuple[int]
-    bg_color: tuple[int]
-    parsed_colors: list  # of RGBA
-    grains: int
-    max_cycles: Optional[int]
-    wireframe: bool
-    seamless: bool
-    seed: Optional[tuple]
-
-    def __init__(self, height=None, width=None, initial_cracks=3, max_num=100, fg_color=(0, 0, 0),
-                 bg_color=(255, 255, 255)):
-        self.height = height
-        self.width = width
-        self.initial_cracks = initial_cracks
-        self.max_num = max_num
-        self.circle_percent = 0
-        self.fg_color = fg_color
-        self.bg_color = bg_color
-        self.parsed_colors = [(0, 255, 0)]
-        self.grains = 64
-        self.max_cycles = None
-        self.wireframe = False
-        self.seamless = False
-        self.seed = None
+    height: int = 0
+    width: int = 0
+    initial_cracks: int = 3
+    max_num: int = 0    # # of cracks
+    circle_percent: int = 10
+    fg_color: tuple[int, int, int] = (0, 0, 0)
+    bg_color: tuple[int, int, int] = (255, 255, 255)
+    parsed_colors: list[tuple[int, int, int]] = field(default_factory=lambda: [(128, 128, 128)])
+    grains: int = 64
+    max_cycles: Optional[int] = None
+    wireframe: bool = False
+    seamless: bool = False
+    seed: Optional[tuple[int, tuple[int], Optional[int]]] = None
 
     def set_color_list(self, color_list=None):
         parsed_color_list = []
@@ -235,7 +212,7 @@ class Substrate(ABC):
     def make_crack(self):
         if len(self.cracks) < self.parameters.max_num and not self.quiesced:
             self.logger.debug("creating %d", self.next_crack_id)
-            cr = Crack(self.next_crack_id)
+            cr = Crack(crack_id=self.next_crack_id)
             self.next_crack_id += 1
             self.logger.debug("made crack = %d", cr.crack_id)
             self.cracks.append(cr)
@@ -387,7 +364,7 @@ class Substrate(ABC):
                 # completed the circle
                 # REWORK
                 # self.start_crack(cr)
-                self.cracks.remove(cr)
+                self.kill_crack(cr)
                 self.logger.debug("Crack list %s", str(self.crack_list()))
                 # END REWORK
                 self.make_crack()
@@ -404,7 +381,7 @@ class Substrate(ABC):
                     self.logger.debug("Crack %d ending, c_grid > 2", cr.crack_id)
                     # REWORK
                     # self.start_crack(cr)
-                    self.cracks.remove(cr)
+                    self.kill_crack(cr)
                     self.logger.debug("Crack list %s", str(self.crack_list()))
                     # end REWORK
                     self.make_crack()
@@ -421,13 +398,17 @@ class Substrate(ABC):
             # cr.y = random.randint(0, self.height-1)
             # cr.t = random.uniform(0, 360.0)
             # self.start_crack(cr)
-            self.cracks.remove(cr)
+            self.kill_crack(cr)
             self.logger.debug("Crack list %s", str(self.crack_list()))
             # end REWORK
 
             self.make_crack()
             self.make_crack()
             self.logger.debug("Crack list %s", str(self.crack_list()))
+
+    def kill_crack(self, cr: Crack=None, reason: dict=None):
+        self.cracks.remove(cr)
+
 
     @abstractmethod
     def graphics_draw_point(self, x, y, color):

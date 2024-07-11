@@ -66,8 +66,11 @@ def run(substrate_parameters=None):
                     pnginfo.add_text("substrate_status", status_json)
 
                     pil_image.save('z.png', pnginfo=pnginfo)
-                    filename = datetime.now().strftime("%Y%m%d%Y-%H%M%S.png")
-                    pil_image.save(filename, pnginfo=pnginfo)
+                    timestamp = datetime.now().strftime("%Y%m%d%Y-%H%M%S")
+                    pil_image.save(f'{timestamp}.png', pnginfo=pnginfo)
+
+                    with open(f'{timestamp}.json', 'w') as f:
+                        f.write(parameters_json)
                 if keystroke == ' ':
                     step = True
             elif event.type in (pygame.KEYUP, pygame.KEYDOWN):

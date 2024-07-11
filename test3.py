@@ -4,7 +4,7 @@ from Substrate import SubstrateParameters
 import pygameSubstrate
 
 
-def main(substrate_parameters=None):
+def main():
     logging.basicConfig(level=logging.DEBUG)
 
     colormap = (
@@ -16,7 +16,10 @@ def main(substrate_parameters=None):
     substrate_parameters.wireframe = False
     substrate_parameters.circle_percent = 10
 
+    print(repr(substrate_parameters))
+
     pygameSubstrate.run(substrate_parameters)
+
 
 if __name__ == '__main__':
     main()

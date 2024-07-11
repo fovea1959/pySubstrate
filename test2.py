@@ -4,7 +4,7 @@ from Substrate import SubstrateParameters
 import pygameSubstrate
 
 
-def main(substrate_parameters=None):
+def main():
     logging.basicConfig(level=logging.DEBUG)
 
     colormap = (
