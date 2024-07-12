@@ -77,6 +77,10 @@ def run(substrate_parameters=None):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 need_to_exit = True
+            elif event.type == pygame.KEYDOWN:
+                key = event.dict.get('key', None)
+                if key == 27:
+                    need_to_exit = True
             elif event.type == pygame.TEXTINPUT:
                 logging.debug("event %s", event)
                 keystroke = event.dict.get('text', '').lower()

@@ -5,7 +5,7 @@ import pygameSubstrate
 
 
 def main():
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
 
     colormap = (
         "#201F21", "#262C2E", "#352626", "#372B27",
