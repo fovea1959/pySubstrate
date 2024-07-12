@@ -190,9 +190,9 @@ class Substrate(ABC):
         old_a = a = self.c_grid[px, py]
 
         if random.choice([True, False]):
-            a = a - 90 * random.uniform(-2, 2.1)  # (frand(4.1) - 2)
+            a = a - 90 + random.uniform(-2, 2.1)  # (frand(4.1) - 2)
         else:
-            a = a + 90 * random.uniform(-2, 2.1)  # (frand(4.1) - 2)
+            a = a + 90 + random.uniform(-2, 2.1)  # (frand(4.1) - 2)
 
         if random.randint(0, 100) < self.parameters.circle_percent:
             cr.curved = True
