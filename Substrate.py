@@ -7,6 +7,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional
 
+import jsons
+
 
 STEP = 0.42
 
@@ -185,7 +187,7 @@ class Substrate(ABC):
 
             self.c_grid[px, py] = cr.t
 
-        a = self.c_grid[px, py]
+        old_a = a = self.c_grid[px, py]
 
         if random.choice([True, False]):
             a = a - 90 * random.uniform(-2, 2.1)  # (frand(4.1) - 2)
@@ -212,7 +214,9 @@ class Substrate(ABC):
         cr.x_start = cr.x = px + (0.61 * math.cos(math.radians(a)))
         cr.y_start = cr.y = py + (0.61 * math.sin(math.radians(a)))
         cr.cycle_start = self.cycles
-        cr.t = a
+        cr.t = cr.t_start = a
+        self.logger.debug("starting crack %d, starting from %s (angle %f), my angle %f",
+                          cr.crack_id, (px, py), old_a, a)
 
     def make_crack(self):
         if len(self.cracks) < self.parameters.max_num and not self.quiesced:
@@ -308,16 +312,20 @@ class Substrate(ABC):
                 random.setstate(self.parameters.seed)
             self.off_img.fill(self.parameters.bg_color)
             self.graphics_initialize()
+            self.graphics_batch_start()
             self.graphics_draw_fill(self.parameters.bg_color)
             for _ in range(self.parameters.initial_cracks):
                 self.make_crack()
+            self.graphics_batch_end()
             self.initialized = True
         if self.quiesced and not self.was_quiesced:
             self.next_crack_id_when_quiesced = self.next_crack_id
             self.was_quiesced = True
         self.cycles += 1
+        self.graphics_batch_start()
         for crack in list(self.cracks):
             self.move_draw_crack(crack)
+        self.graphics_batch_end()
         if self.parameters.max_cycles is not None and self.parameters.max_cycles > 0:
             if self.cycles > self.parameters.max_cycles:
                 self.done = True
@@ -419,6 +427,14 @@ class Substrate(ABC):
                          self.cycles - cr.cycle_start
                          )
         self.cracks.remove(cr)
+
+    @abstractmethod
+    def graphics_batch_start(self):
+        pass
+
+    @abstractmethod
+    def graphics_batch_end(self):
+        pass
 
     @abstractmethod
     def graphics_draw_point(self, x, y, color):

@@ -18,6 +18,13 @@ class PygameSubstrate(Substrate):
         super().__init__(**kwargs)
         logging.info("__init__ %s", self)
 
+    def graphics_batch_start(self):
+        pass
+
+    def graphics_batch_end(self):
+        # logging.debug("updating pygame")
+        pygame.display.update()
+
     def graphics_draw_fill(self, color):
         logging.info("draw_fill %s", color)
         self.surface.fill(color)
@@ -95,5 +102,4 @@ def run(substrate_parameters=None):
         if not was_done and substrate.done:
             save(substrate, substrate_parameters)
             was_done = True
-        # logging.debug("updating pygame")
-        pygame.display.update()
+
